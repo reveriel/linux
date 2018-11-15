@@ -58,6 +58,10 @@
 #include <linux/hugetlb.h>
 #include <linux/backing-dev.h>
 
+#ifdef CONFIG_PKSM
+#include <linux/pksm.h>
+#endif
+
 #include <asm/tlbflush.h>
 
 #include "internal.h"
@@ -744,6 +748,12 @@ static int page_referenced_one(struct page *page, struct vm_area_struct *vma,
 	return SWAP_AGAIN;
 }
 
+int page_referenced_one_check(struct page *page, struct vm_area_struct *vma,
+			unsigned long address, void *arg)
+{
+	return page_referenced_one(page, vma, address, arg);
+}
+
 static bool invalid_page_referenced_vma(struct vm_area_struct *vma, void *arg)
 {
 	struct page_referenced_arg *pra = arg;
@@ -1272,6 +1282,15 @@ out_mlock:
 	}
 	return ret;
 }
+
+#ifdef CONFIG_PKSM
+int try_to_unmap_one_pksm(struct page *page, struct vm_area_struct *vma,
+		     unsigned long address, void *arg)
+{
+	return try_to_unmap_one(page, vma, address, arg);
+}
+
+#endif
 
 /*
  * objrmap doesn't work for nonlinear VMAs because the assumption that

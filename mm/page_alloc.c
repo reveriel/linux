@@ -1394,6 +1394,11 @@ void free_hot_cold_page(struct page *page, bool cold)
 	unsigned long pfn = page_to_pfn(page);
 	int migratetype;
 
+#ifdef CONFIG_PKSM
+	if (PagePKSM(page))
+		pksm_del_anon_page(page);
+#endif
+
 	if (!free_pages_prepare(page, 0))
 		return;
 
