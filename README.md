@@ -1,8 +1,9 @@
 # KSM
 
 KSM(Kernel Samepage Merging). Try to improve it. Based on
-[PKSM](code.google.com/archive/p/pksm).
-Kernel v3.18-rc7
+[PKSM](code.google.com/archive/p/pksm).  Kernel v3.18-rc7
+
+[TOC]
 
 ## Possible plans
 
@@ -13,11 +14,12 @@ Kernel v3.18-rc7
 - same virtual address
 - page cache
 
-## Background, KSM
+## Background
+### BG: KSM
 
 KSM, corresponding file [`ksm.c`](mm/ksm.c), merges pages with same contents.
 KSM is enabled by setting `CONFIG_KSM=y`. It can saves a lot of memory in
-Virutal Machine Hypervisor.
+Virutal Machine Hypervisors.
 
 You can mark a pieces of memory as "Mergeable" using syscall `madvice`, then
 there is a kthread `[ksmd]` that scan all anonymous pages in the Mergeable
@@ -28,7 +30,7 @@ The main data struct is two red-black tree used to find equal pages. Just
 like we when we want to find repeating numbers in a large array, sort it or
 insert to a hashtable are the two most obvious way.
 
-The hashtable method was used in VMware's Virtual Machine products. And a
+VMware uses the hashtable method in its Virtual Machine products, and has a
 patent claim its intellectual property. So Linux community pick the other
 way --- sort the array.
 
@@ -71,14 +73,51 @@ else, no found:
 
 Basically, that's all.
 
-### Delay
+### BG, PKSM
 
-PKSM has three queues as worklists.
+PKSM (file [`mm/pksm.c`](mm/pksm.c)) made some changes to the original KSM.
+
+It has three queues as worklists.
 - new anon page list, or new list.
   - every new anon page is added to this list.
 - rescan anon page list, or rescan list.
   - pages that failed to merge, or removed from unstable tree
 - delete anon page list, or del list.
+
+Every anonymous pages born into the world(system) are put in the new list.
+Those who failed during merge were added to the rescan list.
+ksmd(or pksmd) also scans the unstable tree and picks up those who's content
+has changed, adds them to the rescan list.
+
+The candidate to be to put to the test of `cmp_and_merge_page()` are
+half from new list, half from rescan list.
+
+The del list is just for the convenience of release the data structure for
+each anonymous page. Every processes in the system may allocate new
+anonymous pages and release them. When releasing, the corresponding
+data structure is simply marked and leave the actual deallocation to ksmd.
+
+Pksm also has a special zero page, every anonymous page is first tried to
+merge with this. Empirically zero pages are more than others.
+
+And, when deciding if two pages are equal, the partial hash values are
+compared first. A byte-by-byte comparison is done only when partial hash
+values are the same.
+
+I think that's all of PKSM. Quite short, isn't it.
+
+## Possible Plans
+
+- delay
+- hash adjustable.
+- test uksm
+- hash table instead of rbtree
+- same virtual address
+- page cache
+
+### PP: Delay
+
+
 
 
 
