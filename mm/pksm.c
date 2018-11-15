@@ -293,6 +293,10 @@ static unsigned int ksm_thread_sleep_millisecs = 20;
 /*Seconds pksm should update all unshared_pages by one period*/
 static unsigned int pksm_unshared_page_update_period = 10;
 
+static unsigned int ksm_new_len;
+static unsigned int ksm_del_len;
+static unsigned int ksm_rescan_len;
+
 #define KSM_RUN_STOP	0
 #define KSM_RUN_MERGE	1
 #define KSM_RUN_UNMERGE	2
@@ -804,6 +808,7 @@ static void pksm_free_all_rmap_items(void)
 		if (!rmap_item)
 			continue;
 		list_move(&rmap_item->del_list, &l_del);
+		ksm_del_len--;
 	}
 	spin_unlock_irq(&pksm_np_list_lock);
 
@@ -1827,6 +1832,7 @@ re_cmp:
 	rmap_item->address &=~ INITCHECKSUM_FLAG;
 	rmap_item->address |= RESCAN_LIST_FLAG;
 	list_add_tail(&rmap_item->list, &pksm_rescan_page_list);
+	ksm_rescan_len++;
 	spin_unlock(&pksm_np_list_lock);
 	
 putpage:
@@ -1870,6 +1876,7 @@ static void ksm_do_scan(unsigned int scan_npages)
 		if (!rmap_item) 
 			continue;
 		list_move(&rmap_item->list, &l_add);
+		ksm_new_len--;
 		rmap_item->address &=~ NEWLIST_FLAG;
 		rmap_item->address |= INKSM_FLAG;
 		if (scan++ > scan_npages)
@@ -1882,6 +1889,7 @@ static void ksm_do_scan(unsigned int scan_npages)
 	spin_lock(&pksm_np_list_lock);
 	list_for_each_entry_safe(rmap_item, n_item, &pksm_rescan_page_list, list) {
 		list_del_init(&rmap_item->list);
+		ksm_rescan_len--;
 		rmap_item->address &=~RESCAN_LIST_FLAG;
 		
 		/*page have add del_list? free rmap_item later */
@@ -1941,6 +1949,7 @@ rescan:
 	rmap_item->address |= INITCHECKSUM_FLAG;
 	rmap_item->address |= RESCAN_LIST_FLAG;
 	list_add_tail(&rmap_item->list, &pksm_rescan_page_list);
+	ksm_rescan_len++;
 	spin_unlock(&pksm_np_list_lock);
 
 putpage:
@@ -2110,6 +2119,7 @@ int pksm_add_new_anon_page(struct page *page, struct rmap_item *rmap_item, struc
 
 	spin_lock_irq(&pksm_np_list_lock);
 	list_add_tail(&rmap_item->list, &new_anon_page_list);
+	ksm_new_len++;
 	spin_unlock_irq(&pksm_np_list_lock);
 
 	return 0;
@@ -2151,6 +2161,7 @@ int pksm_del_anon_page(struct page *page)
 		/*rmap_item have added to pksm*/
 		rmap_item->address |= DELLIST_FLAG;
 		list_add_tail(&rmap_item->del_list, &del_anon_page_list);
+		ksm_del_len++;
 	}
 	spin_unlock_irq(&pksm_np_list_lock);
 
@@ -2530,6 +2541,17 @@ static ssize_t rmap_items_show(struct kobject *kobj,
 }
 KSM_ATTR_RO(rmap_items);
 
+#define SYS_RO(X) \
+	static ssize_t X ##_show(struct kobject *kobj, 		\
+				struct kobj_attribute *attr, char *buf) \
+{									\
+	return sprintf(buf, "%u\n", ksm_## X);				\
+}									\
+KSM_ATTR_RO(X)
+SYS_RO(new_len);
+SYS_RO(del_len);
+SYS_RO(rescan_len);
+
 static struct attribute *ksm_attrs[] = {
 	&sleep_millisecs_attr.attr,
 	&period_seconds_attr.attr,
@@ -2542,6 +2564,9 @@ static struct attribute *ksm_attrs[] = {
 	&full_scans_attr.attr,
 	&stable_nodes_attr.attr,
 	&rmap_items_attr.attr,
+	&new_len_attr.attr,
+	&del_len_attr.attr,
+	&rescan_len_attr.attr,
 	NULL,
 };
 
