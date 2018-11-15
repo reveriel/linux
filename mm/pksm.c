@@ -1,6 +1,6 @@
 /*
- * PKSM (Anon-page KSM). 
- *Copyright (C) 2012-2013 
+ * PKSM (Anon-page KSM).
+ *Copyright (C) 2012-2013
  * Authors:
  *	Figo.zhang (figo1802@gmail.com)
  *
@@ -15,19 +15,19 @@
  *      interaction to submit a memory area to KSM is no longer needed.
  *
  * 2. High efficiency for anonymous page detection:
- *      It automatically detects anonymous page is created and freed, It will use a new 
+ *      It automatically detects anonymous page is created and freed, It will use a new
  *      algorithm and mechanism that it directly handle the anonymous page when it be created/freed
- *      by the linux kernel. It is no need to waster CPU time to traversing all of the VMA 
+ *      by the linux kernel. It is no need to waster CPU time to traversing all of the VMA
  *      areas to find valid anonymous pages. KSM/UKSM will waster a lot of CPU time to traversing VMAs
  *      to find a valid anonymous page, PKSM no need considering it.
  *
  * 3. Full Zero Page consideration
- * 	Now pksmd consider full zero pages as special pages and merge them to an 
+ * 	Now pksmd consider full zero pages as special pages and merge them to an
  * 	special unswappable pksm zero page.
  *
  * 4. Check page content periodically
- * 	Pksm considers unstable page contents are volatile, which are add the a FIFO list. It check page 
- * 	content by a hash value periodically. The default scanning cycles is 20 minutes. 
+ * 	Pksm considers unstable page contents are volatile, which are add the a FIFO list. It check page
+ * 	content by a hash value periodically. The default scanning cycles is 20 minutes.
  *
  */
 
@@ -243,9 +243,9 @@ struct ksm_scan {
 #define RESCAN_LIST_FLAG (1<<7)  /*rmap_item in pksm_rescan_page_list*/
 
 
-#define PKSM_FAULT_SUCCESS 	0  
+#define PKSM_FAULT_SUCCESS 	0
 #define PKSM_FAULT_DROP	1  /*drop this rmap_item*/
-#define PKSM_FAULT_TRY      2 /*retry this rmap_item*/  
+#define PKSM_FAULT_TRY      2 /*retry this rmap_item*/
 #define PKSM_FAULT_KEEP    3 /*keep this rmap_item*/
 
 /* The stable and unstable tree heads */
@@ -381,7 +381,7 @@ static void __init ksm_slab_free(void)
 static inline struct stable_node_anon *alloc_stable_anon(void)
 {
 	struct stable_node_anon *node =NULL;
-	
+
 	node = kmem_cache_alloc(stable_anon_cache, GFP_KERNEL);
 	if (node) {
 		ksm_stable_nodes++;
@@ -452,7 +452,7 @@ static inline struct rmap_item *page_stable_rmap_item(struct page *page)
 
 	if (!PageKsm(page))
 		return NULL;
-	
+
 	if (!PagePKSM(page))
 		return NULL;
 
@@ -507,7 +507,7 @@ static inline int in_unstable_tree(struct rmap_item *rmap_item)
 
 static void pksm_del_sharing_page_counter(struct page *page, int n)
 {
-	int i; 
+	int i;
 	struct rmap_item * rmap_item = (struct rmap_item *)(page->pksm);
 
 	for (i = 0; i < n; i++) {
@@ -525,7 +525,7 @@ static void pksm_add_sharing_page_counter(struct page *page, int n)
 		return ;
 
 	rmap_item = (struct rmap_item *)(page->pksm);
-	
+
 	for (i = 0; i<n; i++) {
 		ksm_pages_sharing++;
 		atomic_inc(&rmap_item->_mapcount);
@@ -537,13 +537,13 @@ void pksm_unmap_sharing_page(struct page *page, struct mm_struct *mm, unsigned l
 {
 	int ksm_map, mapcount;
 	struct rmap_item *rmap_item;
-	
+
 	if (!(PageKsm(page) && PagePKSM(page)))
 		return ;
 
 	rmap_item = (struct rmap_item *)(page->pksm);
 
-	if (!check_valid_rmap_item(rmap_item)) 
+	if (!check_valid_rmap_item(rmap_item))
 		return ;
 
 	ksm_map = atomic_read(&rmap_item->_mapcount);
@@ -552,7 +552,7 @@ void pksm_unmap_sharing_page(struct page *page, struct mm_struct *mm, unsigned l
 		return ;
 	else
 		goto free ;
-	
+
 free:
 	if (ksm_map > 0)
 		pksm_del_sharing_page_counter(page, 1);
@@ -663,16 +663,16 @@ static struct page *get_ksm_page(struct rmap_item *rmap_item)
 	struct page *page;
 	void *expected_mapping;
 
-	if (!check_valid_rmap_item(rmap_item)) 
+	if (!check_valid_rmap_item(rmap_item))
 		goto out;
 
 	if (!(rmap_item->address & STABLE_FLAG))
 		goto out;
-	
+
 	page = rmap_item->page;
 	if (!page || !PageKsm(page))
 		goto out;
-	
+
 	expected_mapping = (void *)rmap_item +
 				(PAGE_MAPPING_ANON | PAGE_MAPPING_KSM);
 	rcu_read_lock();
@@ -702,16 +702,16 @@ static struct page *get_mergeable_page(struct rmap_item *rmap_item)
 
 	struct page *page =NULL;
 
-	if (!check_valid_rmap_item(rmap_item)) 
+	if (!check_valid_rmap_item(rmap_item))
 		goto out;
 
 	if (!(rmap_item->address & UNSTABLE_FLAG))
 		goto out;
-	
+
 	page = rmap_item->page;
 	if (IS_ERR_OR_NULL(page))
 		goto out;
-		
+
 	rcu_read_lock();
 	if (!get_page_unless_zero(page))
 		goto unlock;
@@ -731,7 +731,7 @@ static struct page *get_mergeable_page(struct rmap_item *rmap_item)
 
 unlock:
 	rcu_read_unlock();
-out:		
+out:
 	return NULL;
 }
 
@@ -747,7 +747,7 @@ static void remove_rmap_item_from_tree(struct rmap_item *rmap_item, int free_ano
 
 	if (!rmap_item)
 		return ;
-	
+
 	if (rmap_item->address & STABLE_FLAG) {
 		WARN_ON(RB_EMPTY_NODE(&rmap_item->node));
 		if (!RB_EMPTY_NODE(&rmap_item->node)) {
@@ -764,7 +764,7 @@ static void remove_rmap_item_from_tree(struct rmap_item *rmap_item, int free_ano
 			RB_CLEAR_NODE(&rmap_item->node);
 			ksm_pages_unshared--;
 		}
-		
+
 		if (rmap_item->address & CHECKSUM_LIST_FLAG) {
 			list_del_init(&rmap_item->update_list);
 			rmap_item->address &=~ CHECKSUM_LIST_FLAG;
@@ -781,14 +781,14 @@ static void remove_rmap_item_from_tree(struct rmap_item *rmap_item, int free_ano
 				free_stable_anon(stable_anon);
 				cond_resched();
 			}
-	}	
+	}
 }
 
 void pksm_clean_all_rmap_items(struct list_head *list)
 {
 	struct rmap_item *rmap_item , *n_item;
-	
-	list_for_each_entry_safe(rmap_item, n_item, list, del_list) {		
+
+	list_for_each_entry_safe(rmap_item, n_item, list, del_list) {
 		list_del(&rmap_item->del_list);
 		remove_rmap_item_from_tree(rmap_item, 1);
 		rmap_item->address &=~ INKSM_FLAG;
@@ -914,7 +914,7 @@ static u32 pksm_calc_checksum(void *addr, u32 hash_strength)
 	u32 hash = 0xdeadbeef;
 	int index, pos;
 	u32 *key = (u32 *)addr;
-	HASH_FROM_TO(0, hash_strength);	
+	HASH_FROM_TO(0, hash_strength);
 	return hash;
 }
 
@@ -998,7 +998,7 @@ static int write_protect_page(struct vm_area_struct *vma, struct page *page,
 			err = PKSM_FAULT_TRY;
 			goto out_unlock;
 		}
-		
+
 		if (pte_dirty(entry))
 			set_page_dirty(page);
 		entry = pte_mkclean(pte_wrprotect(entry));
@@ -1034,7 +1034,7 @@ static int replace_page(struct vm_area_struct *vma, struct page *page,
 	unsigned long addr;
 	int err = PKSM_FAULT_DROP;
 	pte_t entry;
-	
+
 	addr = page_address_in_vma(page, vma);
 	if (addr == -EFAULT)
 		goto out;
@@ -1073,19 +1073,19 @@ static int replace_page(struct vm_area_struct *vma, struct page *page,
 		get_page(kpage);
 		page_add_anon_rmap(kpage, vma, addr);
 	}
-	
+
 	set_pte_at_notify(mm, addr, ptep, entry);
-	
+
 	page_remove_rmap(page);
 	if (!page_mapped(page))
 		try_to_free_swap(page);
 	page_cache_release(page);
 
 	pte_unmap_unlock(ptep, ptl);
-	
+
 	/*add ksm_pages_sharing++*/
 	pksm_add_sharing_page_counter(kpage, 1);
-	
+
 	err = 0;
 
 out:
@@ -1159,17 +1159,17 @@ static int pksm_rmap_walk(struct page *page, int (*rmap_one)(struct page *,
 
 	if (!PageAnon(page))
 		goto out;
-	
+
 	anon_vma = page_lock_anon_vma_read(page);
 	if (!anon_vma)
 		goto out;
 
 	pgoff = page->index << (PAGE_CACHE_SHIFT - PAGE_SHIFT);
-	
+
 //	list_for_each_entry(avc, &anon_vma->head, same_anon_vma) {
 	anon_vma_interval_tree_foreach(avc, &anon_vma->rb_root, pgoff, pgoff) {
 		struct vm_area_struct *vma = avc->vma;
-		if (!vma_can_enter(vma)) 
+		if (!vma_can_enter(vma))
 			break;
 		address = vma_address(page, vma);
 		if (address == -EFAULT)
@@ -1219,15 +1219,15 @@ static int pksm_writepect_pte(struct page *page, struct vm_area_struct *vma,
 {
 	int err = PKSM_FAULT_DROP;
 	pte_t orig_pte = __pte(0);
-	
+
 	if ((err = write_protect_page(vma, page, &orig_pte)) == 0) {
 		if (!kpage) {
 			set_page_stable_ksm(page, NULL);
 			mark_page_accessed(page);
 			err = 0;
 		}  else if (pages_identical(page, kpage)) {
-			err = replace_page(vma, page, kpage, orig_pte);	
-		} 
+			err = replace_page(vma, page, kpage, orig_pte);
+		}
 	}
 
 	if ((vma->vm_flags & VM_LOCKED) && kpage && !err) {
@@ -1267,12 +1267,12 @@ static int try_to_merge_one_anon_page(struct page *page, struct page *kpage)
 		err = PKSM_FAULT_TRY;
 		goto out;
 	}
-	
+
 	/*set write-protect and migrate pte*/
 	err = pksm_rmap_walk(page, pksm_writepect_pte, kpage);
 	if (err != PKSM_FAULT_SUCCESS)
 		goto unlock;
-	
+
 	err = 0;
 
 unlock:
@@ -1319,7 +1319,7 @@ static int try_to_merge_two_pages(struct rmap_item *rmap_item,
 		err = try_to_merge_with_pksm_page(tree_rmap_item,
 							tree_page, page);
 	}
-	
+
 	return err;
 }
 
@@ -1350,7 +1350,7 @@ static struct page *stable_tree_search(struct page *page)
 
 	if (PageKsm(page))
 		return NULL;
-	
+
 retry:
 	new = &root_stable_tree.rb_node;
 
@@ -1360,10 +1360,10 @@ retry:
 		int ret;
 
 		cond_resched();
-		
+
 		tree_rmap_item = rb_entry(*new, struct rmap_item, node);
-		
-		if ((tree_rmap_item->address & DELLIST_FLAG) || 
+
+		if ((tree_rmap_item->address & DELLIST_FLAG) ||
 			!tree_rmap_item->page) {
 			remove_rmap_item_from_tree(tree_rmap_item, 0);
 			//printk("%s:%d, page:0x%x:retry...\n",__func__, __LINE__, page);
@@ -1392,7 +1392,7 @@ retry:
 		} else
 			return tree_page;
 	}
-	
+
 	return NULL;
 }
 
@@ -1403,10 +1403,10 @@ retry:
  * This function returns the stable tree node just allocated on success,
  * NULL otherwise.
  */
-static int stable_tree_insert(struct rmap_item *rmap_item, 
+static int stable_tree_insert(struct rmap_item *rmap_item,
 											struct page *kpage)
 {
-	
+
 	struct rb_node *parent = NULL;
 	struct rb_node **new;
 
@@ -1428,9 +1428,9 @@ retry:
 			//printk("%s:%d, page:0x%x:retry...\n",__func__, __LINE__, kpage);
 			goto retry;
 		}
-		
+
 		tree_page = get_ksm_page(tree_rmap_item);
-		if (!tree_page) 
+		if (!tree_page)
 			return PKSM_FAULT_DROP;
 
 #ifdef CONFIG_PKSM_RHASH
@@ -1458,7 +1458,7 @@ retry:
 
 	BUG_ON (rmap_item->address & UNSTABLE_FLAG);
 	BUG_ON (rmap_item->address & STABLE_FLAG);
-	
+
 	rb_link_node(&rmap_item->node, parent, new);
 	rb_insert_color(&rmap_item->node, &root_stable_tree);
 	set_page_stable_ksm(kpage, rmap_item);
@@ -1487,12 +1487,12 @@ struct rmap_item *unstable_tree_search_insert(struct rmap_item *rmap_item,
 					      struct page **tree_pagep)
 
 {
-	
+
 	struct rb_node *parent = NULL;
 	struct rb_node **new;
 
 	BUG_ON (rmap_item != page->pksm);
-	
+
 retry:
 	new = &root_unstable_tree.rb_node;
 
@@ -1505,20 +1505,20 @@ retry:
 		tree_rmap_item = rb_entry(*new, struct rmap_item, node);
 
 		BUG_ON (rmap_item != page->pksm);
-	
+
 		if ((tree_rmap_item->address & DELLIST_FLAG) ||
 			!tree_rmap_item->page) {
 			remove_rmap_item_from_tree(tree_rmap_item, 0);
 			//printk("%s:%d, page:0x%x:retry...\n",__func__, __LINE__, page);
 			goto retry;
 		}
-		
+
 		tree_page = get_mergeable_page(tree_rmap_item);
 		if (IS_ERR_OR_NULL(tree_page))
 			return NULL;
 
 		BUG_ON (tree_rmap_item != tree_page->pksm);
-		
+
 		/*
 		 * Don't substitute a ksm page for a forked page.
 		 */
@@ -1547,7 +1547,7 @@ retry:
 	}
 
 	BUG_ON (rmap_item != page->pksm);
-	
+
 	BUG_ON (rmap_item->address & UNSTABLE_FLAG);
 	BUG_ON (rmap_item->address & STABLE_FLAG);
 
@@ -1574,19 +1574,19 @@ static void stable_tree_append(struct rmap_item *rmap_head, struct page *page)
 
 	struct stable_node_anon *anon_node;
 	struct rmap_item *rmap =(struct rmap_item *)(page->pksm);
-	
-	if (!check_valid_rmap_item(rmap_head)) 
+
+	if (!check_valid_rmap_item(rmap_head))
 		return ;
-	if (!check_valid_rmap_item(rmap)) 
+	if (!check_valid_rmap_item(rmap))
 		return ;
-	
+
 	anon_node = alloc_stable_anon();
-	
+
 	if (PageKsm(page)) {
 		anon_node->anon_vma = rmap->anon_vma;
 	} else
-		anon_node->anon_vma = page_rmapping(page); 
-	
+		anon_node->anon_vma = page_rmapping(page);
+
 	get_anon_vma(anon_node->anon_vma);
 
 	/*add anon_node to rmap_head->hlist*/
@@ -1594,7 +1594,7 @@ static void stable_tree_append(struct rmap_item *rmap_head, struct page *page)
 
 	if (!anon_node->hlist.next)
 		ksm_pages_shared++;
-	
+
 }
 
 /*---------------------------- zero page----------------------------*/
@@ -1625,12 +1625,12 @@ static int pksm_merge_zero_page(struct page *page, struct vm_area_struct *vma,
 {
 	int err = PKSM_FAULT_DROP;
 	pte_t orig_pte = __pte(0);
-	
+
 	if ((err = write_protect_page(vma, page, &orig_pte)) == 0) {
 		if (is_page_full_zero(page))
 			err = replace_page(vma, page, kpage, orig_pte);
 	}
-	
+
 	return err;
 }
 
@@ -1656,12 +1656,12 @@ int try_to_merge_zero_page(struct page *page)
 	 */
 	if (!trylock_page(page))
 		goto out;
-	
+
 	/*set write-protect and migrate pte*/
 	err = pksm_rmap_walk(page, pksm_merge_zero_page, zero_page);
 	if (err != PKSM_FAULT_SUCCESS)
 		goto unlock;
-	
+
 	err = 0;
 
 unlock:
@@ -1692,7 +1692,7 @@ int cmp_and_merge_zero_page(struct page *page)
  * @page: the page that we are searching identical page to.
  * @rmap_item: the reverse mapping into the virtual address of this page
  */
-static int cmp_and_merge_page(struct page *page, struct rmap_item *rmap_item, 
+static int cmp_and_merge_page(struct page *page, struct rmap_item *rmap_item,
 									int init_checksum)
 {
 	struct rmap_item *tree_rmap_item = NULL;
@@ -1712,7 +1712,7 @@ static int cmp_and_merge_page(struct page *page, struct rmap_item *rmap_item,
 
 	remove_rmap_item_from_tree(rmap_item, 0);
 
-	if (init_checksum) 
+	if (init_checksum)
 		rmap_item->checksum = calc_checksum(page);
 
 	if (!cmp_and_merge_zero_page(page))
@@ -1723,7 +1723,7 @@ static int cmp_and_merge_page(struct page *page, struct rmap_item *rmap_item,
 	if (kpage) {
 		BUG_ON (rmap_item != page->pksm);
 		err = try_to_merge_with_pksm_page(rmap_item, page, kpage);
-		if (!err) {			
+		if (!err) {
 			lock_page(kpage);
 			stable_tree_append(page_stable_rmap_item(kpage), page);
 			unlock_page(kpage);
@@ -1744,29 +1744,29 @@ static int cmp_and_merge_page(struct page *page, struct rmap_item *rmap_item,
 		 * rmap_item of the page we have merged with from the unstable
 		 * tree, and insert it instead as new node in the stable tree.
 		 */
-		if (!err) {	
+		if (!err) {
 			kpage = page;
 			BUG_ON (rmap_item != page->pksm);
 			BUG_ON(rmap_item->page != kpage);
 
 			remove_rmap_item_from_tree(tree_rmap_item, 0);
-			
+
 			/*insert new page to stable tree*/
 			lock_page(kpage);
 			err = stable_tree_insert(rmap_item, kpage);
 			if (!err) {
 				stable_tree_append(rmap_item, kpage);
-				
+
 				lock_page(tree_page);
 				stable_tree_append(rmap_item, tree_page);
 				unlock_page(tree_page);
 				err = 0;
-			} 
+			}
 			unlock_page(kpage);
 		}
 		put_page(tree_page);
 	}
-	
+
 out:
 	return err;
 }
@@ -1801,18 +1801,18 @@ static void pksm_update_unstable_page_checksum(void)
 	list_for_each_entry_safe(rmap_item, n_item, &unstabletree_checksum_list, update_list) {
 		if (!rmap_item)
 			continue;
-		
+
 		BUG_ON(rmap_item->address & NEWLIST_FLAG);
 		BUG_ON(!(rmap_item->address & CHECKSUM_LIST_FLAG));
 		BUG_ON((rmap_item->address & STABLE_FLAG));
-		
+
 		page = rmap_item->page;
-		if (!check_valid_rmap_item(rmap_item)) 
+		if (!check_valid_rmap_item(rmap_item))
 			goto out;
 
 		if (!get_page_unless_zero(page))
 			goto out;
-		
+
 		if (PageLocked(page))
 			goto putpage;
 		if (check_page_dio(page))
@@ -1825,7 +1825,7 @@ static void pksm_update_unstable_page_checksum(void)
 			goto re_cmp;
 		} else
 			goto putpage;
-		
+
 re_cmp:
 	remove_rmap_item_from_tree(rmap_item, 0);
 	spin_lock(&pksm_np_list_lock);
@@ -1834,10 +1834,10 @@ re_cmp:
 	list_add_tail(&rmap_item->list, &pksm_rescan_page_list);
 	ksm_rescan_len++;
 	spin_unlock(&pksm_np_list_lock);
-	
+
 putpage:
 	put_page(page);
-out:	
+out:
 	if (scan++ > need_scan)
 		break;
 	cond_resched();
@@ -1850,7 +1850,7 @@ static void pksm_drop_rmap_item(struct rmap_item *rmap_item)
 
 		if (page && PagePKSM(page))
 			__ClearPagePKSM(page);
-		
+
 		rmap_item->address = 0;
 		remove_rmap_item_from_tree(rmap_item, 1);
 		if (page)
@@ -1873,7 +1873,7 @@ static void ksm_do_scan(unsigned int scan_npages)
 
 	spin_lock_irq(&pksm_np_list_lock);
 	list_for_each_entry_safe(rmap_item, n_item, &new_anon_page_list, list) {
-		if (!rmap_item) 
+		if (!rmap_item)
 			continue;
 		list_move(&rmap_item->list, &l_add);
 		ksm_new_len--;
@@ -1891,7 +1891,7 @@ static void ksm_do_scan(unsigned int scan_npages)
 		list_del_init(&rmap_item->list);
 		ksm_rescan_len--;
 		rmap_item->address &=~RESCAN_LIST_FLAG;
-		
+
 		/*page have add del_list? free rmap_item later */
 		if (rmap_item->address & DELLIST_FLAG)
 			continue;
@@ -1907,22 +1907,22 @@ static void ksm_do_scan(unsigned int scan_npages)
 		/*page have add del_list? free rmap_item later */
 		if (rmap_item->address & DELLIST_FLAG)
 			goto out;
-		
+
 		if (rmap_item->address & INITCHECKSUM_FLAG) {
 			rmap_item->address &=~ INITCHECKSUM_FLAG;
 			init_checksum = 1;
 		} else
 			init_checksum = 0;
-		
-		page = rmap_item->page;		
-		if (!check_valid_rmap_item(rmap_item)) 
+
+		page = rmap_item->page;
+		if (!check_valid_rmap_item(rmap_item))
 			goto out;
 
 		if (!(PageAnon(page)))
 			goto out;
-		
+
 		flush_dcache_page(page);
-		
+
 		/*get ref for new page*/
 		if (!get_page_unless_zero(page))
 			goto out;
@@ -1943,7 +1943,7 @@ static void ksm_do_scan(unsigned int scan_npages)
 			case PKSM_FAULT_TRY:
 				goto rescan;
 			}
-		
+
 rescan:
 	spin_lock(&pksm_np_list_lock);
 	rmap_item->address |= INITCHECKSUM_FLAG;
@@ -1957,7 +1957,7 @@ putpage:
 out:
 	cond_resched();
 	}
-	
+
 	pksm_free_all_rmap_items();
 	pksm_update_unstable_page_checksum();
 }
@@ -2092,25 +2092,25 @@ void __ksm_exit(struct mm_struct *mm)
 int pksm_add_new_anon_page(struct page *page, struct rmap_item *rmap_item, struct anon_vma *anon_vma)
 {
 	rmap_item = (struct rmap_item *)rmap_item;
-	
+
 	if (!rmap_item)
 		return -EFAULT;
 	if (!page || !anon_vma)
 		return -EFAULT;
-	
+
 	/*is pksm page ? */
 	if (PagePKSM(page))
 		return -EFAULT;
-	
+
 	if (!(PageAnon(page)))
 		return -EFAULT;
 
 	if (PageKsm(page))
-		return -EFAULT;	
+		return -EFAULT;
 
 	anon_vma = (struct anon_vma *)((unsigned long)anon_vma & ~PAGE_MAPPING_FLAGS);
-	rmap_item->anon_vma = anon_vma; 
-	
+	rmap_item->anon_vma = anon_vma;
+
 	SetPagePKSM(page);
 	rmap_item->address |= NEWLIST_FLAG;
 	rmap_item->address |= INITCHECKSUM_FLAG;
@@ -2139,8 +2139,8 @@ int pksm_del_anon_page(struct page *page)
 	rmap_item = (struct rmap_item *)(page->pksm);
 	if (!rmap_item)
 		return -EFAULT;
-	
-	if (page != rmap_item->page) 
+
+	if (page != rmap_item->page)
 		return -EFAULT;
 
 	map = atomic_read(&rmap_item->_mapcount);
@@ -2150,7 +2150,7 @@ int pksm_del_anon_page(struct page *page)
 
 	page->pksm = NULL;
 	rmap_item->page = NULL;
-	
+
 	spin_lock_irq(&pksm_np_list_lock);
 	if (rmap_item->address & (NEWLIST_FLAG | RESCAN_LIST_FLAG)) {
 		/*rmap_item still at new list, have not added to pksm, directly free rmap_item*/
@@ -2279,7 +2279,7 @@ out:
 }
 
 #ifdef CONFIG_MIGRATION
-int rmap_walk_ksm(struct page *page, struct rmap_walk_control *rwc) 
+int rmap_walk_ksm(struct page *page, struct rmap_walk_control *rwc)
 {
 	struct stable_node_anon *stable_anon;
 	struct hlist_node *hlist;
@@ -2305,9 +2305,9 @@ again:
 						0, ULONG_MAX) {
 
 			vma = vmac->vma;
-		
+
 			ret = rwc->rmap_one(page, vma,
-					rmap_item->address, rwc->arg);	
+					rmap_item->address, rwc->arg);
 			if (ret != SWAP_AGAIN) {
 				anon_vma_unlock_read(anon_vma);
 				goto out;
@@ -2478,7 +2478,7 @@ static ssize_t run_store(struct kobject *kobj, struct kobj_attribute *attr,
 		return -EINVAL;
 	if (flags > KSM_RUN_UNMERGE)
 		return -EINVAL;
-	
+
 	mutex_lock(&ksm_thread_mutex);
 	if (ksm_run != flags) {
 		ksm_run = flags;
