@@ -1,0 +1,3 @@
+[submodule "ksm-doc"]
+	path = ksm-doc
+	url = https://github.com/reveriel/ksm-doc.git
