@@ -56,6 +56,7 @@
 #include <linux/random.h>
 #include <linux/kernel.h>
 #include <linux/huge_mm.h>
+#include <linux/sort.h>
 
 #include <asm/tlbflush.h>
 #include "internal.h"
@@ -304,6 +305,8 @@ static unsigned int ksm_run = KSM_RUN_MERGE;
 
 /* The hash strength needed to hash a full page */
 #define RSAD_STRENGTH_FULL		(PAGE_SIZE / sizeof(u32))
+/* sample 1/16 of the page */
+#define RSAD_STRENGTH			(RSAD_STRENGTH_FULL >> 4)
 
 /* The random offsets in a page */
 static u32 *pksm_random_table;
@@ -931,7 +934,7 @@ static u32 calc_checksum(struct page *page)
 	u32 checksum;
 	void *addr = kmap_atomic(page);
 	//checksum = jhash2(addr, PAGE_SIZE / 4, 17);
-	checksum = pksm_calc_checksum(addr, RSAD_STRENGTH_FULL >> 4);
+	checksum = pksm_calc_checksum(addr, RSAD_STRENGTH);
 	kunmap_atomic(addr);
 	return checksum;
 }
@@ -1873,6 +1876,9 @@ static void ksm_do_scan(unsigned int scan_npages)
 
 	spin_lock_irq(&pksm_np_list_lock);
 	list_for_each_entry_safe(rmap_item, n_item, &new_anon_page_list, list) {
+		if (rmap_item->address &= DELLIST_FLAG)
+			printk(KERN_WARNING  "a page marked DEL in new list\n");
+
 		if (!rmap_item)
 			continue;
 		list_move(&rmap_item->list, &l_add);
@@ -2576,6 +2582,11 @@ static struct attribute_group ksm_attr_group = {
 };
 #endif /* CONFIG_SYSFS */
 
+static int u32_cmp(const void *pa, const void *pb)
+{
+	return *(int *)pa - *(int *)pb;
+}
+
 static inline int init_random_sampling(void)
 {
 	unsigned long i;
@@ -2596,7 +2607,8 @@ static inline int init_random_sampling(void)
 		pksm_random_table[swap_index] = tmp;
 	}
 
-	pksm_zero_random_checksum = pksm_calc_zero_page_checksum(RSAD_STRENGTH_FULL >> 4);
+	sort(pksm_random_table, RSAD_STRENGTH, sizeof(u32), u32_cmp, NULL);
+	pksm_zero_random_checksum = pksm_calc_zero_page_checksum(RSAD_STRENGTH);
 
 	return 0;
 }
