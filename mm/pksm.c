@@ -228,6 +228,7 @@ struct rmap_item {
 	atomic_t _mapcount;
 	unsigned long checksum;
 	struct list_head update_list; /*list for unstable page checksum update*/
+	int cnt;
 };
 
 
@@ -263,20 +264,20 @@ struct ksm_scan {
 
 #define SEQNR_MASK	0x0ff	/* low bits of unstable tree seqnr */
 
-#define NEWLIST_FLAG  (1<<0)		/* rmap_item is at new_anon_page_list */
-#define DELLIST_FLAG  (1<<1)      /*rmap_item at del_anon_page_list*/
-#define INKSM_FLAG  (1<<2)      /*this page add to ksm subsystem*/
-#define UNSTABLE_FLAG  (1<<3)  /* is a node of the unstable tree */
-#define STABLE_FLAG (1<<4)		/* is listed from the stable tree */
-#define CHECKSUM_LIST_FLAG (1<<5)  /*rmap_item in checksum list*/
-#define INITCHECKSUM_FLAG (1<<6)
-#define RESCAN_LIST_FLAG (1<<7)  /*rmap_item in pksm_rescan_page_list*/
+#define NEWLIST_FLAG	(1<<0)	/* rmap_item is at new_anon_page_list */
+#define DELLIST_FLAG	(1<<1)	/* rmap_item at del_anon_page_list */
+#define INKSM_FLAG	(1<<2)	/* this page add to ksm subsystem */
+#define UNSTABLE_FLAG	(1<<3)	/* is a node of the unstable tree */
+#define STABLE_FLAG	(1<<4)	/* is listed from the stable tree */
+#define CHECKSUM_LIST_FLAG	(1<<5) /* rmap_item in checksum list */
+#define INITCHECKSUM_FLAG	(1<<6)
+#define RESCAN_LIST_FLAG	(1<<7) /*rmap_item in pksm_rescan_page_list*/
 
 
 #define PKSM_FAULT_SUCCESS 	0
-#define PKSM_FAULT_DROP	1  /*drop this rmap_item*/
-#define PKSM_FAULT_TRY      2 /*retry this rmap_item*/
-#define PKSM_FAULT_KEEP    3 /*keep this rmap_item*/
+#define PKSM_FAULT_DROP		1 /* drop this rmap_item */
+#define PKSM_FAULT_TRY		2 /* retry this rmap_item */
+#define PKSM_FAULT_KEEP		3 /* keep this rmap_item */
 
 /* The stable and unstable tree heads */
 static struct rb_root root_stable_tree = RB_ROOT;
@@ -1906,6 +1907,7 @@ static void ksm_do_scan(unsigned int scan_npages)
 	LIST_HEAD(l_add);
 	int scan = 0;
 
+
 	spin_lock(&pksm_np_list_lock);
 	list_for_each_entry_safe(rmap_item, n_item, &new_anon_page_list, list) {
 		if (rmap_item->address & DELLIST_FLAG)
@@ -2164,6 +2166,7 @@ int pksm_add_new_anon_page(struct page *page, struct rmap_item *rmap_item, struc
 	rmap_item->address |= INITCHECKSUM_FLAG;
 	page->pksm = rmap_item;
 	rmap_item->page = page;
+	ramp_item->cnt = 0;
 
 	spin_lock(&pksm_np_list_lock);
 	list_add_tail(&rmap_item->list, &new_anon_page_list);
@@ -2664,6 +2667,7 @@ static void __init init_func(void)
 {
 #ifdef DB_
 	printk(KERN_INFO "============PKSM: debug enabled=============\n");
+	printk(KERN_INFO "PKSM: sizeof(rmap_item) is %u\n", sizeof(struct rmap_item));
 #endif
 }
 
