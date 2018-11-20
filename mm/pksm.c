@@ -61,7 +61,34 @@
 #include <asm/tlbflush.h>
 #include "internal.h"
 
+/** some helper function for debug **/
+
+int list_len(struct list_head *head) {
+	struct list_head *p = head;
+	int len;
+	for (len = 0; p->next != head; p=p->next)
+		len++;
+	return len;
+}
+
 #define CONFIG_PKSM_RHASH
+
+#define DB_ // debug
+
+
+#ifdef assert
+#undef assert
+#endif
+
+#define assert(expr) \
+do { \
+	if (unlikely(!(expr))) { \
+		printk(KERN_ERR "Assertion failed! %s,%s,%s,line=%d\n", \
+		#expr, __FILE__, __func__, __LINE__); \
+	} \
+} while (0)
+
+
 
 #ifdef CONFIG_X86
 #undef memcmp
@@ -289,7 +316,7 @@ unsigned long ksm_pages_zero_sharing;
 static unsigned int ksm_thread_pages_to_scan = 1000;
 
 /* Milliseconds ksmd should sleep between batches */
-static unsigned int ksm_thread_sleep_millisecs = 20;
+static unsigned int ksm_thread_sleep_millisecs = 1000;
 
 /*Seconds pksm should update all unshared_pages by one period*/
 static unsigned int pksm_unshared_page_update_period = 10;
@@ -806,14 +833,17 @@ static void pksm_free_all_rmap_items(void)
 	struct rmap_item *rmap_item , *n_item;
 	LIST_HEAD(l_del);
 
-	spin_lock_irq(&pksm_np_list_lock);
+	spin_lock(&pksm_np_list_lock);
+#ifdef DB_
+	assert(list_len(&del_anon_page_list) == ksm_del_len);
+#endif
 	list_for_each_entry_safe(rmap_item, n_item, &del_anon_page_list, del_list) {
 		if (!rmap_item)
 			continue;
 		list_move(&rmap_item->del_list, &l_del);
 		ksm_del_len--;
 	}
-	spin_unlock_irq(&pksm_np_list_lock);
+	spin_unlock(&pksm_np_list_lock);
 
 	pksm_clean_all_rmap_items(&l_del);
 }
@@ -1874,7 +1904,7 @@ static void ksm_do_scan(unsigned int scan_npages)
 	LIST_HEAD(l_add);
 	int scan = 0;
 
-	spin_lock_irq(&pksm_np_list_lock);
+	spin_lock(&pksm_np_list_lock);
 	list_for_each_entry_safe(rmap_item, n_item, &new_anon_page_list, list) {
 		if (rmap_item->address &= DELLIST_FLAG)
 			printk(KERN_WARNING  "a page marked DEL in new list\n");
@@ -1883,12 +1913,16 @@ static void ksm_do_scan(unsigned int scan_npages)
 			continue;
 		list_move(&rmap_item->list, &l_add);
 		ksm_new_len--;
+#ifdef DB_	
+		assert(list_len(&new_anon_page_list) == ksm_new_len);
+#endif
+
 		rmap_item->address &=~ NEWLIST_FLAG;
 		rmap_item->address |= INKSM_FLAG;
 		if (scan++ > scan_npages)
 			break;
 	}
-	spin_unlock_irq(&pksm_np_list_lock);
+	spin_unlock(&pksm_np_list_lock);
 
 	scan = 0;
 
@@ -1898,10 +1932,16 @@ static void ksm_do_scan(unsigned int scan_npages)
 		ksm_rescan_len--;
 		rmap_item->address &=~RESCAN_LIST_FLAG;
 
+#ifdef DB_
+		assert(list_len(&pksm_rescan_page_list) == ksm_rescan_len);
+#endif
+
+
 		/*page have add del_list? free rmap_item later */
 		if (rmap_item->address & DELLIST_FLAG)
 			continue;
 		list_add_tail(&rmap_item->list, &l_add);
+
 		if (scan++ > scan_npages)
 			break;
 	}
@@ -2123,10 +2163,10 @@ int pksm_add_new_anon_page(struct page *page, struct rmap_item *rmap_item, struc
 	page->pksm = rmap_item;
 	rmap_item->page = page;
 
-	spin_lock_irq(&pksm_np_list_lock);
+	spin_lock(&pksm_np_list_lock);
 	list_add_tail(&rmap_item->list, &new_anon_page_list);
 	ksm_new_len++;
-	spin_unlock_irq(&pksm_np_list_lock);
+	spin_unlock(&pksm_np_list_lock);
 
 	return 0;
 }
@@ -2157,10 +2197,15 @@ int pksm_del_anon_page(struct page *page)
 	page->pksm = NULL;
 	rmap_item->page = NULL;
 
-	spin_lock_irq(&pksm_np_list_lock);
+	spin_lock(&pksm_np_list_lock);
 	if (rmap_item->address & (NEWLIST_FLAG | RESCAN_LIST_FLAG)) {
 		/*rmap_item still at new list, have not added to pksm, directly free rmap_item*/
 		list_del(&rmap_item->list);
+		if (rmap_item->address & NEWLIST_FLAG)
+			ksm_new_len--;
+		else
+			ksm_rescan_len--;
+
 		rmap_item->address = 0;
 		pksm_free_rmap_item(rmap_item);
 	} else {
@@ -2169,7 +2214,7 @@ int pksm_del_anon_page(struct page *page)
 		list_add_tail(&rmap_item->del_list, &del_anon_page_list);
 		ksm_del_len++;
 	}
-	spin_unlock_irq(&pksm_np_list_lock);
+	spin_unlock(&pksm_np_list_lock);
 
 	return 0;
 }
