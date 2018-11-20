@@ -271,7 +271,7 @@ struct ksm_scan {
 #define STABLE_FLAG	(1<<4)	/* is listed from the stable tree */
 #define CHECKSUM_LIST_FLAG	(1<<5) /* rmap_item in checksum list */
 #define INITCHECKSUM_FLAG	(1<<6)
-#define RESCAN_LIST_FLAG	(1<<7) /*rmap_item in pksm_rescan_page_list*/
+// #define RESCAN_LIST_FLAG	(1<<7) /*rmap_item in pksm_rescan_page_list*/
 
 
 #define PKSM_FAULT_SUCCESS 	0
@@ -370,7 +370,7 @@ static DEFINE_SPINLOCK(ksm_mmlist_lock);
 static DEFINE_SPINLOCK(pksm_np_list_lock);
 struct list_head new_anon_page_list = LIST_HEAD_INIT(new_anon_page_list);
 struct list_head del_anon_page_list = LIST_HEAD_INIT(del_anon_page_list);
-struct list_head pksm_rescan_page_list = LIST_HEAD_INIT(pksm_rescan_page_list);
+// struct list_head pksm_rescan_page_list = LIST_HEAD_INIT(pksm_rescan_page_list);
 
 struct list_head unstabletree_checksum_list = LIST_HEAD_INIT(unstabletree_checksum_list);
 struct list_head pksm_volatile_page_list = LIST_HEAD_INIT(pksm_volatile_page_list);
@@ -1866,9 +1866,9 @@ re_cmp:
 	remove_rmap_item_from_tree(rmap_item, 0);
 	spin_lock(&pksm_np_list_lock);
 	rmap_item->address &=~ INITCHECKSUM_FLAG;
-	rmap_item->address |= RESCAN_LIST_FLAG;
-	list_add_tail(&rmap_item->list, &pksm_rescan_page_list);
-	ksm_rescan_len++;
+	rmap_item->address |= NEWLIST_FLAG;
+	list_add_tail(&rmap_item->list, &new_anon_page_list);
+	ksm_new_len++;
 	spin_unlock(&pksm_np_list_lock);
 
 putpage:
@@ -1930,17 +1930,15 @@ static void ksm_do_scan(unsigned int scan_npages)
 
 	scan = 0;
 
+#if 0
 	spin_lock(&pksm_np_list_lock);
 	list_for_each_entry_safe(rmap_item, n_item, &pksm_rescan_page_list, list) {
 		list_del_init(&rmap_item->list);
 		ksm_rescan_len--;
 		rmap_item->address &=~RESCAN_LIST_FLAG;
-
 #ifdef DB_
 		assert(list_len(&pksm_rescan_page_list) == ksm_rescan_len);
 #endif
-
-
 		/*page have add del_list? free rmap_item later */
 		if (rmap_item->address & DELLIST_FLAG)
 			continue;
@@ -1950,6 +1948,8 @@ static void ksm_do_scan(unsigned int scan_npages)
 			break;
 	}
 	spin_unlock(&pksm_np_list_lock);
+#endif
+
 
 	list_for_each_entry_safe(rmap_item, n_item, &l_add, list) {
 		list_del_init(&rmap_item->list);
@@ -1997,9 +1997,9 @@ static void ksm_do_scan(unsigned int scan_npages)
 rescan:
 	spin_lock(&pksm_np_list_lock);
 	rmap_item->address |= INITCHECKSUM_FLAG;
-	rmap_item->address |= RESCAN_LIST_FLAG;
-	list_add_tail(&rmap_item->list, &pksm_rescan_page_list);
-	ksm_rescan_len++;
+	rmap_item->address |= NEWLIST_FLAG;
+	list_add_tail(&rmap_item->list, &new_anon_page_list);
+	ksm_new_len++;
 	spin_unlock(&pksm_np_list_lock);
 
 putpage:
@@ -2166,7 +2166,7 @@ int pksm_add_new_anon_page(struct page *page, struct rmap_item *rmap_item, struc
 	rmap_item->address |= INITCHECKSUM_FLAG;
 	page->pksm = rmap_item;
 	rmap_item->page = page;
-	ramp_item->cnt = 0;
+	rmap_item->cnt = 0;
 
 	spin_lock(&pksm_np_list_lock);
 	list_add_tail(&rmap_item->list, &new_anon_page_list);
@@ -2203,13 +2203,10 @@ int pksm_del_anon_page(struct page *page)
 	rmap_item->page = NULL;
 
 	spin_lock(&pksm_np_list_lock);
-	if (rmap_item->address & (NEWLIST_FLAG | RESCAN_LIST_FLAG)) {
+	if (rmap_item->address & NEWLIST_FLAG) {
 		/*rmap_item still at new list, have not added to pksm, directly free rmap_item*/
 		list_del(&rmap_item->list);
-		if (rmap_item->address & NEWLIST_FLAG)
-			ksm_new_len--;
-		else
-			ksm_rescan_len--;
+		ksm_new_len--;
 
 		rmap_item->address = 0;
 		pksm_free_rmap_item(rmap_item);
