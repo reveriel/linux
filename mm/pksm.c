@@ -75,6 +75,7 @@ int list_len(struct list_head *head) {
 
 #define DB_ // debug
 
+#ifdef DB_
 
 #ifdef assert
 #undef assert
@@ -88,6 +89,7 @@ do { \
 	} \
 } while (0)
 
+#endif /* DB_ */
 
 
 #ifdef CONFIG_X86
@@ -2658,6 +2660,13 @@ static inline int init_random_sampling(void)
 	return 0;
 }
 
+static void __init init_func(void)
+{
+#ifdef DB_
+	printk(KERN_INFO "============PKSM: debug enabled=============\n");
+#endif
+}
+
 static int __init ksm_init(void)
 {
 	struct task_struct *ksm_thread;
@@ -2670,6 +2679,8 @@ static int __init ksm_init(void)
 	err = init_random_sampling();
 	if (err)
 		goto out_random;
+
+	init_func();
 
 	ksm_thread = kthread_run(ksm_scan_thread, NULL, "pksmd");
 	if (IS_ERR(ksm_thread)) {
