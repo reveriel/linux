@@ -1906,7 +1906,7 @@ static void ksm_do_scan(unsigned int scan_npages)
 
 	spin_lock(&pksm_np_list_lock);
 	list_for_each_entry_safe(rmap_item, n_item, &new_anon_page_list, list) {
-		if (rmap_item->address &= DELLIST_FLAG)
+		if (rmap_item->address & DELLIST_FLAG)
 			printk(KERN_WARNING  "a page marked DEL in new list\n");
 
 		if (!rmap_item)
