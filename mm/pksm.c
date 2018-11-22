@@ -1907,29 +1907,56 @@ static void ksm_do_scan(unsigned int scan_npages)
 	LIST_HEAD(l_add);
 	int scan = 0;
 
+	const int N = 3;
 
+	/* rmap_item can be in
+	 *    new list.
+	 *    inksm (list_add or after that)
+	 *    del list
+	 */    
 	spin_lock(&pksm_np_list_lock);
 	list_for_each_entry_safe(rmap_item, n_item, &new_anon_page_list, list) {
-		if (rmap_item->address & DELLIST_FLAG)
-			printk(KERN_WARNING  "a page marked DEL in new list\n");
-
 		if (!rmap_item)
 			continue;
-		list_move(&rmap_item->list, &l_add);
-		ksm_new_len--;
-#ifdef DB_	
-		assert(list_len(&new_anon_page_list) == ksm_new_len);
-#endif
 
-		rmap_item->address &=~ NEWLIST_FLAG;
-		rmap_item->address |= INKSM_FLAG;
+		/* maybe impossible ? */
+		if (unlikely(rmap_item->address & DELLIST_FLAG)) {
+			printk(KERN_WARNING  "a page marked DEL in new list\n");
+			list_move_tail(&rmap_item->del_list, &del_anon_page_list);
+			ksm_del_len++;
+			ksm_new_len--;
+			continue;
+		}
+
+		/* dirty check */
+		page = rmap_item->page;
+		if (!page || !PagePKSM(page))
+			continue;
+		if (PageDirty(page)) {
+			printk(KERN_INFO "page dirty, set 0\n");
+			rmap_item->cnt = 0;
+			continue;
+		}
+
+		rmap_item->cnt++;
+		if (rmap_item->cnt == N) {
+			rmap_item->cnt = 0;
+
+			list_move(&rmap_item->list, &l_add);
+			ksm_new_len--;
+#ifdef DB_	
+			assert(list_len(&new_anon_page_list) == ksm_new_len);
+#endif
+			rmap_item->address &=~ NEWLIST_FLAG;
+			rmap_item->address |= INKSM_FLAG;
+		}
+
 		if (scan++ > scan_npages)
 			break;
 	}
 	spin_unlock(&pksm_np_list_lock);
 
 	scan = 0;
-
 #if 0
 	spin_lock(&pksm_np_list_lock);
 	list_for_each_entry_safe(rmap_item, n_item, &pksm_rescan_page_list, list) {
@@ -1992,20 +2019,20 @@ static void ksm_do_scan(unsigned int scan_npages)
 				goto putpage;
 			case PKSM_FAULT_TRY:
 				goto rescan;
-			}
+		}
 
 rescan:
-	spin_lock(&pksm_np_list_lock);
-	rmap_item->address |= INITCHECKSUM_FLAG;
-	rmap_item->address |= NEWLIST_FLAG;
-	list_add_tail(&rmap_item->list, &new_anon_page_list);
-	ksm_new_len++;
-	spin_unlock(&pksm_np_list_lock);
+		spin_lock(&pksm_np_list_lock);
+		rmap_item->address |= INITCHECKSUM_FLAG;
+		rmap_item->address |= NEWLIST_FLAG;
+		list_add_tail(&rmap_item->list, &new_anon_page_list);
+		ksm_new_len++;
+		spin_unlock(&pksm_np_list_lock);
 
 putpage:
-	put_page(page);
+		put_page(page);
 out:
-	cond_resched();
+		cond_resched();
 	}
 
 	pksm_free_all_rmap_items();
