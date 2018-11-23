@@ -56,11 +56,12 @@
 #include <linux/random.h>
 #include <linux/kernel.h>
 #include <linux/huge_mm.h>
-#include <linux/sort.h>
 
 #include <asm/tlbflush.h>
 #include "internal.h"
 
+
+#include <linux/sort.h>
 /** some helper function for debug **/
 
 int list_len(struct list_head *head) {
@@ -71,7 +72,6 @@ int list_len(struct list_head *head) {
 	return len;
 }
 
-#define CONFIG_PKSM_RHASH
 
 #define DB_ // debug
 
@@ -91,6 +91,7 @@ do { \
 
 #endif /* DB_ */
 
+#define CONFIG_PKSM_RHASH
 
 #ifdef CONFIG_X86
 #undef memcmp
