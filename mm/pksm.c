@@ -320,7 +320,7 @@ unsigned long ksm_pages_zero_sharing;
 static unsigned int ksm_thread_pages_to_scan = 1000;
 
 /* Milliseconds ksmd should sleep between batches */
-static unsigned int ksm_thread_sleep_millisecs = 1000;
+static unsigned int ksm_thread_sleep_millisecs = 200;
 
 /*Seconds pksm should update all unshared_pages by one period*/
 static unsigned int pksm_unshared_page_update_period = 10;
@@ -328,6 +328,8 @@ static unsigned int pksm_unshared_page_update_period = 10;
 static unsigned int ksm_new_len;
 static unsigned int ksm_del_len;
 static unsigned int ksm_rescan_len;
+
+static unsigned int ksm_n = 4;
 
 #define KSM_RUN_STOP	0
 #define KSM_RUN_MERGE	1
@@ -1908,7 +1910,7 @@ static void ksm_do_scan(unsigned int scan_npages)
 	LIST_HEAD(l_add);
 	int scan = 0;
 
-	const int N = 3;
+	int N = ksm_n;
 
 	/* rmap_item can be in
 	 *    new list.
@@ -2496,6 +2498,29 @@ static ssize_t sleep_millisecs_store(struct kobject *kobj,
 }
 KSM_ATTR(sleep_millisecs);
 
+static ssize_t n_show(struct kobject *kobj,
+				    struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", ksm_n);
+}
+
+static ssize_t n_store(struct kobject *kobj,
+				     struct kobj_attribute *attr,
+				     const char *buf, size_t count)
+{
+	unsigned long n_long;
+	int err;
+
+	err = kstrtoul(buf, 10, &n_long);
+	if (err || n_long > UINT_MAX)
+		return -EINVAL;
+
+	ksm_n = (unsigned int) n_long;
+
+	return count;
+}
+KSM_ATTR(n);
+
 static ssize_t period_seconds_show(struct kobject *kobj,
 				    struct kobj_attribute *attr, char *buf)
 {
@@ -2648,6 +2673,7 @@ static struct attribute *ksm_attrs[] = {
 	&new_len_attr.attr,
 	&del_len_attr.attr,
 	&rescan_len_attr.attr,
+	&n_attr.attr,
 	NULL,
 };
 
