@@ -1935,11 +1935,11 @@ static void ksm_do_scan(unsigned int scan_npages)
 		page = rmap_item->page;
 		if (!page || !PagePKSM(page))
 			continue;
-		if (PageDirty(page)) {
-			printk(KERN_INFO "page dirty, set 0\n");
-			rmap_item->cnt = 0;
-			continue;
-		}
+		/* if (PageDirty(page)) { */
+		/* 	printk(KERN_INFO "page dirty, set 0\n"); */
+		/* 	rmap_item->cnt = 0; */
+		/* 	continue; */
+		/* } */
 
 		rmap_item->cnt++;
 		if (rmap_item->cnt == N) {
@@ -1952,6 +1952,8 @@ static void ksm_do_scan(unsigned int scan_npages)
 #endif
 			rmap_item->address &=~ NEWLIST_FLAG;
 			rmap_item->address |= INKSM_FLAG;
+		} else {
+			list_move_tail(&rmap_item->list, &new_anon_page_list);
 		}
 
 		if (scan++ > scan_npages)
