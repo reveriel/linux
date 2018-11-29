@@ -319,6 +319,10 @@ unsigned long ksm_pages_zero_sharing;
 /* Number of pages ksmd should scan in one batch */
 static unsigned int ksm_thread_pages_to_scan = 1000;
 
+/* How long a page will stay in new list before merge test,
+ * in millisecs */
+static unsigned int ksm_delay_time = 3;
+
 /* Milliseconds ksmd should sleep between batches */
 static unsigned int ksm_thread_sleep_millisecs = 200;
 
@@ -329,7 +333,7 @@ static unsigned int ksm_new_len;
 static unsigned int ksm_del_len;
 static unsigned int ksm_rescan_len;
 
-static unsigned int ksm_n = 4;
+static unsigned int ksm_n = 3;
 
 #define KSM_RUN_STOP	0
 #define KSM_RUN_MERGE	1
@@ -2049,6 +2053,13 @@ static int ksmd_should_run(void)
 	return (ksm_run & KSM_RUN_MERGE);
 }
 
+static void update_pages_to_scan(void)
+{
+	/* pages_to_scan = N * sleep_millisecs * ListLength / Time */
+	ksm_thread_pages_to_scan = ksm_n * ksm_thread_sleep_millisecs \
+				   * ksm_new_len / ksm_delay_time;
+}
+
 static int ksm_scan_thread(void *nothing)
 {
 	set_freezable();
@@ -2056,8 +2067,10 @@ static int ksm_scan_thread(void *nothing)
 
 	while (!kthread_should_stop()) {
 		mutex_lock(&ksm_thread_mutex);
-		if (ksmd_should_run())
+		if (ksmd_should_run()) {
+			update_pages_to_scan();
 			ksm_do_scan(ksm_thread_pages_to_scan);
+		}
 		mutex_unlock(&ksm_thread_mutex);
 
 		try_to_freeze();
@@ -2563,11 +2576,33 @@ static ssize_t pages_to_scan_store(struct kobject *kobj,
 	if (err || nr_pages > UINT_MAX)
 		return -EINVAL;
 
-	ksm_thread_pages_to_scan = nr_pages;
+	/* ksm_thread_pages_to_scan = nr_pages; */
 
 	return count;
 }
 KSM_ATTR(pages_to_scan);
+
+static ssize_t delay_time_show(struct kobject *kobj,
+			       struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", ksm_delay_time);
+}
+
+static ssize_t delay_time_store(struct kobject *kobj,
+				struct kobj_attribute *attr,
+				const char *buf, size_t count)
+{
+	int err;
+	unsigned long delay_time_l;
+
+	err = kstrtoul(buf, 10, &delay_time_l);
+	if (err || delay_time_l > UINT_MAX)
+		return -EINVAL;
+	ksm_delay_time = delay_time_l;
+	return count;
+}
+KSM_ATTR(delay_time);
+
 
 static ssize_t run_show(struct kobject *kobj, struct kobj_attribute *attr,
 			char *buf)
