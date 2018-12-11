@@ -813,14 +813,14 @@ static void remove_rmap_item_from_tree(struct rmap_item *rmap_item, int free_ano
 
 	/*free stable_anon_node*/
 	if (free_anon && !hlist_empty(&rmap_item->hlist)) {
-			hlist_for_each_entry_safe(stable_anon, tmp, &rmap_item->hlist, hlist) {
-				if (!stable_anon)
-					continue;
-				hlist_del(&stable_anon->hlist);
-				put_anon_vma(stable_anon->anon_vma);
-				free_stable_anon(stable_anon);
-				cond_resched();
-			}
+		hlist_for_each_entry_safe(stable_anon, tmp, &rmap_item->hlist, hlist) {
+			if (!stable_anon)
+				continue;
+			hlist_del(&stable_anon->hlist);
+			put_anon_vma(stable_anon->anon_vma);
+			free_stable_anon(stable_anon);
+			cond_resched();
+		}
 	}
 }
 
