@@ -1257,7 +1257,7 @@ struct page *ksm_might_need_to_copy(struct page *page,
 	return new_page;
 }
 
-static int pksm_writepect_pte(struct page *page, struct vm_area_struct *vma,
+static int pksm_wrprotect_pte(struct page *page, struct vm_area_struct *vma,
 				 unsigned long addr, void *kpage)
 {
 	int err = PKSM_FAULT_DROP;
@@ -1312,7 +1312,7 @@ static int try_to_merge_one_anon_page(struct page *page, struct page *kpage)
 	}
 
 	/*set write-protect and migrate pte*/
-	err = pksm_rmap_walk(page, pksm_writepect_pte, kpage);
+	err = pksm_rmap_walk(page, pksm_wrprotect_pte, kpage);
 	if (err != PKSM_FAULT_SUCCESS)
 		goto unlock;
 
