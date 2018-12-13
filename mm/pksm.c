@@ -279,6 +279,7 @@ struct ksm_scan {
 #define PKSM_FAULT_DROP		1 /* drop this rmap_item */
 #define PKSM_FAULT_TRY		2 /* retry this rmap_item */
 #define PKSM_FAULT_KEEP		3 /* keep this rmap_item */
+// nobody is using the PKSM_FAULT_KEEP
 
 /* The stable and unstable tree heads */
 static struct rb_root root_stable_tree = RB_ROOT;
@@ -1804,8 +1805,20 @@ static int cmp_and_merge_page(struct page *page, struct rmap_item *rmap_item,
 				stable_tree_append(rmap_item, tree_page);
 				unlock_page(tree_page);
 				err = 0;
+			} else {
+				/* error handling */
+				// TODO
+
 			}
 			unlock_page(kpage);
+		} else {
+			/* try_to_merge_two_pages can return
+			 * PKSM_FAULT_SUCCESS
+			 * PKSM_FAULT_DROP
+			 * PKSM_FAULT_TRY
+			 * not properly handled.
+			 */
+			// TODO
 		}
 		put_page(tree_page);
 	}
@@ -2376,7 +2389,6 @@ out:
 	return ret;
 }
 
-#ifdef CONFIG_MIGRATION
 int rmap_walk_ksm(struct page *page, struct rmap_walk_control *rwc)
 {
 	struct stable_node_anon *stable_anon;
@@ -2419,6 +2431,7 @@ out:
 	return ret;
 }
 
+#ifdef CONFIG_MIGRATION
 void ksm_migrate_page(struct page *newpage, struct page *oldpage)
 {
 	struct rmap_item *rmap_item;
