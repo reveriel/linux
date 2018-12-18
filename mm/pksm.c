@@ -218,56 +218,27 @@ struct stable_node_anon {
  */
 struct rmap_item {
 	struct anon_vma *anon_vma;	/* point to the page anon_page */
-	struct page  *page;
-	unsigned long address;		/* + low bits used for flags below */
+	struct page *page;
 	struct list_head list; /*list for add new page(rmap_item)*/
 	struct list_head del_list; /*list for del a page(rmap_item)*/
 	struct hlist_head hlist; /*list for stable anon */
 	union {
 		struct rb_node node;	/* when node of unstable tree */
 	};
-	atomic_t _mapcount;
 	unsigned long checksum;
 	struct list_head update_list; /*list for unstable page checksum update*/
-	int cnt;
+	atomic_t _mapcount;
+	short address;		/* + low bits used for flags below */
+	short cnt;
 };
 
 
-/**
- * struct mm_slot - ksm information per mm that is being scanned
- * @link: link to the mm_slots hash list
- * @mm_list: link into the mm_slots list, rooted in ksm_mm_head
- * @rmap_list: head for this mm_slot's singly-linked list of rmap_items
- * @mm: the mm that this information is valid for
- */
-struct mm_slot {
-	struct hlist_node link;
-	struct list_head mm_list;
-	struct rmap_item *rmap_list;
-	struct mm_struct *mm;
-};
-
-/**
- * struct ksm_scan - cursor for scanning
- * @mm_slot: the current mm_slot we are scanning
- * @address: the next address inside that to be scanned
- * @rmap_list: link to the next rmap to be scanned in the rmap_list
- * @seqnr: count of completed full scans (needed when removing unstable node)
- *
- * There is only the one ksm_scan instance of this cursor structure.
- */
-struct ksm_scan {
-	struct mm_slot *mm_slot;
-	unsigned long address;
-	struct rmap_item **rmap_list;
-	unsigned long seqnr;
-};
 
 #define SEQNR_MASK	0x0ff	/* low bits of unstable tree seqnr */
 
 #define NEWLIST_FLAG	(1<<0)	/* rmap_item is at new_anon_page_list */
 #define DELLIST_FLAG	(1<<1)	/* rmap_item at del_anon_page_list */
-#define INKSM_FLAG	(1<<2)	/* this page add to ksm subsystem */
+/* #define INKSM_FLAG	(1<<2)	/1* this page add to ksm subsystem *1/ */
 #define UNSTABLE_FLAG	(1<<3)	/* is a node of the unstable tree */
 #define STABLE_FLAG	(1<<4)	/* is listed from the stable tree */
 #define CHECKSUM_LIST_FLAG	(1<<5) /* rmap_item in checksum list */
@@ -286,20 +257,9 @@ static struct rb_root root_stable_tree = RB_ROOT;
 static struct rb_root root_unstable_tree = RB_ROOT;
 
 
-#define MM_SLOTS_HASH_SHIFT 10
-#define MM_SLOTS_HASH_HEADS (1 << MM_SLOTS_HASH_SHIFT)
-static struct hlist_head mm_slots_hash[MM_SLOTS_HASH_HEADS];
-
-static struct mm_slot ksm_mm_head = {
-	.mm_list = LIST_HEAD_INIT(ksm_mm_head.mm_list),
-};
-static struct ksm_scan ksm_scan = {
-	.mm_slot = &ksm_mm_head,
-};
 
 static struct kmem_cache *rmap_item_cache;
 static struct kmem_cache *stable_anon_cache;
-static struct kmem_cache *mm_slot_cache;
 
 /* The number of nodes in the stable tree */
 static unsigned long ksm_pages_shared;
@@ -397,10 +357,6 @@ static int __init ksm_slab_init(void)
 	if (!stable_anon_cache)
 		goto out_free1;
 
-	mm_slot_cache = KSM_KMEM_CACHE(mm_slot, 0);
-	if (!mm_slot_cache)
-		goto out_free2;
-
 	return 0;
 
 out_free2:
@@ -413,10 +369,8 @@ out:
 
 static void __init ksm_slab_free(void)
 {
-	kmem_cache_destroy(mm_slot_cache);
 	kmem_cache_destroy(stable_anon_cache);
 	kmem_cache_destroy(rmap_item_cache);
-	mm_slot_cache = NULL;
 }
 
 static inline struct stable_node_anon *alloc_stable_anon(void)
@@ -480,8 +434,8 @@ static struct page *page_trans_compound_anon(struct page *page)
 
 static int check_valid_rmap_item(struct rmap_item *rmap_item)
 {
-	if (!rmap_item || !rmap_item->page || !PagePKSM(rmap_item->page) ||
-		!(rmap_item->address & INKSM_FLAG))
+	if (!rmap_item || !rmap_item->page || !PagePKSM(rmap_item->page))
+		/* !(rmap_item->address & INKSM_FLAG)) */
 		return 0;
 	else
 		return 1;
@@ -498,42 +452,6 @@ static inline struct rmap_item *page_stable_rmap_item(struct page *page)
 		return NULL;
 
 	return page->pksm;
-}
-
-static inline struct mm_slot *alloc_mm_slot(void)
-{
-	if (!mm_slot_cache)	/* initialization failed */
-		return NULL;
-	return kmem_cache_zalloc(mm_slot_cache, GFP_KERNEL);
-}
-
-static inline void free_mm_slot(struct mm_slot *mm_slot)
-{
-	kmem_cache_free(mm_slot_cache, mm_slot);
-}
-
-static struct mm_slot *get_mm_slot(struct mm_struct *mm)
-{
-	struct mm_slot *mm_slot;
-	struct hlist_head *bucket;
-	struct hlist_node *node;
-
-	bucket = &mm_slots_hash[hash_ptr(mm, MM_SLOTS_HASH_SHIFT)];
-	hlist_for_each_entry_safe(mm_slot, node, bucket, link) {
-		if (mm == mm_slot->mm)
-			return mm_slot;
-	}
-	return NULL;
-}
-
-static void insert_to_mm_slots_hash(struct mm_struct *mm,
-				    struct mm_slot *mm_slot)
-{
-	struct hlist_head *bucket;
-
-	bucket = &mm_slots_hash[hash_ptr(mm, MM_SLOTS_HASH_SHIFT)];
-	mm_slot->mm = mm;
-	hlist_add_head(&mm_slot->link, bucket);
 }
 
 static inline int in_stable_tree(struct rmap_item *rmap_item)
@@ -832,7 +750,7 @@ void pksm_clean_all_rmap_items(struct list_head *list)
 	list_for_each_entry_safe(rmap_item, n_item, list, del_list) {
 		list_del(&rmap_item->del_list);
 		remove_rmap_item_from_tree(rmap_item, 1);
-		rmap_item->address &=~ INKSM_FLAG;
+		/* rmap_item->address &=~ INKSM_FLAG; */
 		rmap_item->address &=~ DELLIST_FLAG;
 		pksm_free_rmap_item(rmap_item);
 		cond_resched();
@@ -895,6 +813,8 @@ static int unmerge_ksm_pages(struct vm_area_struct *vma,
  */
 static int unmerge_and_remove_all_rmap_items(void)
 {
+	return 0;
+#if 0
 	struct mm_slot *mm_slot;
 	struct mm_struct *mm;
 	struct vm_area_struct *vma;
@@ -949,6 +869,7 @@ error:
 	ksm_scan.mm_slot = &ksm_mm_head;
 	spin_unlock(&ksm_mmlist_lock);
 	return err;
+#endif
 }
 #endif /* CONFIG_SYSFS */
 
@@ -1968,7 +1889,7 @@ static void ksm_do_scan(unsigned int scan_npages)
 			assert(list_len(&new_anon_page_list) == ksm_new_len);
 #endif
 			rmap_item->address &=~ NEWLIST_FLAG;
-			rmap_item->address |= INKSM_FLAG;
+			/* rmap_item->address |= INKSM_FLAG; */
 		} else {
 			list_move_tail(&rmap_item->list, &new_anon_page_list);
 		}
@@ -2128,74 +2049,6 @@ int ksm_madvise(struct vm_area_struct *vma, unsigned long start,
 	return 0;
 }
 
-int __ksm_enter(struct mm_struct *mm)
-{
-	struct mm_slot *mm_slot;
-	int needs_wakeup;
-
-	mm_slot = alloc_mm_slot();
-	if (!mm_slot)
-		return -ENOMEM;
-
-	/* Check ksm_run too?  Would need tighter locking */
-	needs_wakeup = list_empty(&ksm_mm_head.mm_list);
-
-	spin_lock(&ksm_mmlist_lock);
-	insert_to_mm_slots_hash(mm, mm_slot);
-	/*
-	 * Insert just behind the scanning cursor, to let the area settle
-	 * down a little; when fork is followed by immediate exec, we don't
-	 * want ksmd to waste time setting up and tearing down an rmap_list.
-	 */
-	list_add_tail(&mm_slot->mm_list, &ksm_scan.mm_slot->mm_list);
-	spin_unlock(&ksm_mmlist_lock);
-
-	set_bit(MMF_VM_MERGEABLE, &mm->flags);
-	atomic_inc(&mm->mm_count);
-
-	if (needs_wakeup)
-		wake_up_interruptible(&ksm_thread_wait);
-
-	return 0;
-}
-
-void __ksm_exit(struct mm_struct *mm)
-{
-	struct mm_slot *mm_slot;
-	int easy_to_free = 0;
-
-	/*
-	 * This process is exiting: if it's straightforward (as is the
-	 * case when ksmd was never running), free mm_slot immediately.
-	 * But if it's at the cursor or has rmap_items linked to it, use
-	 * mmap_sem to synchronize with any break_cows before pagetables
-	 * are freed, and leave the mm_slot on the list for ksmd to free.
-	 * Beware: ksm may already have noticed it exiting and freed the slot.
-	 */
-
-	spin_lock(&ksm_mmlist_lock);
-	mm_slot = get_mm_slot(mm);
-	if (mm_slot && ksm_scan.mm_slot != mm_slot) {
-		if (!mm_slot->rmap_list) {
-			hlist_del(&mm_slot->link);
-			list_del(&mm_slot->mm_list);
-			easy_to_free = 1;
-		} else {
-			list_move(&mm_slot->mm_list,
-				  &ksm_scan.mm_slot->mm_list);
-		}
-	}
-	spin_unlock(&ksm_mmlist_lock);
-
-	if (easy_to_free) {
-		free_mm_slot(mm_slot);
-		clear_bit(MMF_VM_MERGEABLE, &mm->flags);
-		mmdrop(mm);
-	} else if (mm_slot) {
-		down_write(&mm->mmap_sem);
-		up_write(&mm->mmap_sem);
-	}
-}
 
 int pksm_add_new_anon_page(struct page *page, struct rmap_item *rmap_item, struct anon_vma *anon_vma)
 {
@@ -2676,13 +2529,6 @@ static ssize_t pages_unshared_show(struct kobject *kobj,
 }
 KSM_ATTR_RO(pages_unshared);
 
-static ssize_t full_scans_show(struct kobject *kobj,
-			       struct kobj_attribute *attr, char *buf)
-{
-	return sprintf(buf, "%lu\n", ksm_scan.seqnr);
-}
-KSM_ATTR_RO(full_scans);
-
 static ssize_t stable_nodes_show(struct kobject *kobj,
 				  struct kobj_attribute *attr, char *buf)
 {
@@ -2717,7 +2563,6 @@ static struct attribute *ksm_attrs[] = {
 	&pages_sharing_attr.attr,
 	&pages_zero_sharing_attr.attr,
 	&pages_unshared_attr.attr,
-	&full_scans_attr.attr,
 	&stable_nodes_attr.attr,
 	&rmap_items_attr.attr,
 	&new_len_attr.attr,
