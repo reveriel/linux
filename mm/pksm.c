@@ -1804,20 +1804,20 @@ static void pksm_update_unstable_page_checksum(void)
 			goto putpage;
 
 re_cmp:
-	remove_rmap_item_from_tree(rmap_item, 0);
-	spin_lock(&pksm_np_list_lock);
-	rmap_item->address &=~ INITCHECKSUM_FLAG;
-	rmap_item->address |= NEWLIST_FLAG;
-	list_add_tail(&rmap_item->list, &new_anon_page_list);
-	ksm_new_len++;
-	spin_unlock(&pksm_np_list_lock);
+		remove_rmap_item_from_tree(rmap_item, 0);
+		spin_lock(&pksm_np_list_lock);
+		rmap_item->address &=~ INITCHECKSUM_FLAG;
+		rmap_item->address |= NEWLIST_FLAG;
+		list_add_tail(&rmap_item->list, &new_anon_page_list);
+		ksm_new_len++;
+		spin_unlock(&pksm_np_list_lock);
 
 putpage:
-	put_page(page);
+		put_page(page);
 out:
-	if (scan++ > need_scan)
-		break;
-	cond_resched();
+		if (scan++ > need_scan)
+			break;
+		cond_resched();
 	}
 }
 
