@@ -1800,8 +1800,10 @@ static void pksm_update_unstable_page_checksum(void)
 		if (rmap_item->checksum != checksum) {
 			rmap_item->checksum = checksum;
 			goto re_cmp;
-		} else
+		} else {
+			list_move_tail(&rmap_item->update_list, &unstabletree_checksum_list);
 			goto putpage;
+		}
 
 re_cmp:
 		remove_rmap_item_from_tree(rmap_item, 0);
