@@ -221,7 +221,7 @@ struct rmap_item {
 	struct page *page;
 	struct list_head list; /*list for add new page(rmap_item)*/
 	struct list_head del_list; /*list for del a page(rmap_item)*/
-	struct hlist_head hlist; /*list for stable anon */
+	struct hlist_head hlist; 	/*list for stable anon */
 	union {
 		struct rb_node node;	/* when node of unstable tree */
 	};
@@ -406,6 +406,8 @@ struct rmap_item *pksm_alloc_rmap_item(void)
 		RB_CLEAR_NODE(&rmap_item->node);
 		ksm_rmap_items++;
 		atomic_set(&rmap_item->_mapcount, 0);
+	} else {
+		printk(KERN_WARNING "pksm, no mem\n");
 	}
 	return rmap_item;
 }
@@ -1546,6 +1548,10 @@ static void stable_tree_append(struct rmap_item *rmap_head, struct page *page)
 		return ;
 
 	anon_node = alloc_stable_anon();
+	if (!anon_node) {
+		printk(KERN_WARNING "pksm, no mem\n");
+		return ;
+	}
 
 	if (PageKsm(page)) {
 		anon_node->anon_vma = rmap->anon_vma;
@@ -1728,6 +1734,7 @@ static int cmp_and_merge_page(struct page *page, struct rmap_item *rmap_item,
 				err = 0;
 			} else {
 				/* error handling */
+				// stable_tree_append may fail
 				// TODO
 
 			}
@@ -1861,15 +1868,6 @@ static void ksm_do_scan(unsigned int scan_npages)
 	list_for_each_entry_safe(rmap_item, n_item, &new_anon_page_list, list) {
 		if (!rmap_item)
 			continue;
-
-		/* maybe impossible ? */
-		if (unlikely(rmap_item->address & DELLIST_FLAG)) {
-			printk(KERN_WARNING  "a page marked DEL in new list\n");
-			list_move_tail(&rmap_item->del_list, &del_anon_page_list);
-			ksm_del_len++;
-			ksm_new_len--;
-			continue;
-		}
 
 		/* dirty check */
 		page = rmap_item->page;
